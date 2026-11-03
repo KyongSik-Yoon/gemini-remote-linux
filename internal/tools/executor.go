@@ -152,12 +152,15 @@ func (e *Executor) Declarations() []proto.FunctionDecl {
 		},
 		{
 			Name:        "view_file",
-			Description: "View an image, PDF, or binary file by uploading it as an attachment.",
+			Description: "Inspect a local file (if text, returns its content like read_file; if image/PDF/binary, attaches it for your multimodal inspection without uploading to Google Drive).",
 			Parameters: &proto.SchemaDef{
 				Type:     proto.TypeObject,
 				Required: []string{"path"},
 				Properties: map[string]*proto.SchemaDef{
-					"path": {Type: proto.TypeString, Description: "Absolute path to the file"},
+					"path":       {Type: proto.TypeString, Description: "Absolute path to the file"},
+					"start_line": {Type: proto.TypeInteger, Description: "1-based start line (for text files)"},
+					"end_line":   {Type: proto.TypeInteger, Description: "1-based end line (for text files)"},
+					"limit":      {Type: proto.TypeInteger, Description: "Max lines to read (for text files)"},
 				},
 			},
 		},
@@ -335,7 +338,7 @@ func (e *Executor) Declarations() []proto.FunctionDecl {
 		},
 		{
 			Name:        "upload_to_drive",
-			Description: "Upload a local file (such as a screenshot, image, PDF, or document) to the user's Google Drive and return a web_view_link URL so the user can view or open it directly in the chat.",
+			Description: "Upload a local image, screenshot, PDF, or document to the user's Google Drive ONLY when the user explicitly asks to see, view, or share that file in the chat. NEVER upload source code, config files (e.g. pom.xml, .json, .yaml, .env), or files you are merely reading/inspecting during a task.",
 			Parameters: &proto.SchemaDef{
 				Type:     proto.TypeObject,
 				Required: []string{"FilePath"},
@@ -699,18 +702,36 @@ func (e *Executor) toolReadFile(args map[string]any) (map[string]any, error) {
 	}, nil
 }
 
+func isMultimodalBinary(mimeType, fileName string, data []byte) bool {
+	ft := scotty.ClassifyFileType(mimeType, fileName)
+	switch ft {
+	case scotty.FileTypeImage, scotty.FileTypeVideo, scotty.FileTypeAudio,
+		scotty.FileTypePDF, scotty.FileTypeZip, scotty.FileTypeExcel,
+		scotty.FileTypeWord, scotty.FileTypePowerPoint, scotty.FileTypeODT, scotty.FileTypeHWP:
+		return true
+	}
+	return bytes.IndexByte(data, 0) != -1
+}
+
 func (e *Executor) toolViewFile(ctx context.Context, args map[string]any) (map[string]any, []scotty.BlobAttachment, string, error) {
 	p := expandHome(strArg(args, "path", "AbsolutePath"))
 	data, err := os.ReadFile(p)
 	if err != nil {
 		return nil, nil, "", err
 	}
+	mimeType := scotty.DetectMimeType(p, data)
+	fileName := filepath.Base(p)
+
+	// 텍스트/코드/설정 파일은 Scotty나 Google Drive에 업로드하지 않고 로컬에서 바로 읽어 반환한다.
+	if !isMultimodalBinary(mimeType, fileName, data) {
+		r, err := e.toolReadFile(args)
+		return r, nil, "", err
+	}
+
 	token, err := e.authMgr.AccessToken(ctx)
 	if err != nil {
 		return nil, nil, "", err
 	}
-	mimeType := scotty.DetectMimeType(p, data)
-	fileName := filepath.Base(p)
 	blob, err := e.uploader.Upload(ctx, token, fileName, mimeType, data, scotty.FileSourceToolGenerated)
 	if err != nil {
 		return nil, nil, "", err
@@ -720,16 +741,6 @@ func (e *Executor) toolViewFile(ctx context.Context, args map[string]any) (map[s
 		"path":      p,
 		"mime_type": mimeType,
 		"size":      len(data),
-	}
-	if driveRes, driveErr := e.toolUploadToDrive(ctx, map[string]any{"FilePath": p}); driveErr == nil {
-		if link, ok := driveRes["web_view_link"].(string); ok && link != "" {
-			res["web_view_link"] = link
-			res["drive_file_id"] = driveRes["file_id"]
-			res["assistant_instruction"] = fmt.Sprintf(
-				"IMPORTANT: The user on mobile cannot see local files inline. You MUST include this clickable Markdown link in your response so the user can view the file directly: [%s (Google Drive에서 보기)](%s)",
-				fileName, link,
-			)
-		}
 	}
 	return res, []scotty.BlobAttachment{*blob}, "", nil
 }
@@ -1152,6 +1163,10 @@ func (e *Executor) toolUploadToDrive(ctx context.Context, args map[string]any) (
 		"web_view_link":   parsed.WebViewLink,
 		"drive_url":       parsed.WebViewLink,
 		"web_content_url": parsed.WebContentLink,
+		"assistant_instruction": fmt.Sprintf(
+			"Include this clickable Markdown link in your response so the user can open the file: [%s (Google Drive에서 보기)](%s)",
+			parsed.Name, parsed.WebViewLink,
+		),
 	}, nil
 }
 

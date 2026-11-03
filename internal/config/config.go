@@ -216,9 +216,11 @@ func (c *Config) CollectBootstrapFiles() map[string][]byte {
 		}
 		out[cand.key] = data
 	}
-	const remoteFileNote = "\n\n## Remote File & Image Sharing Rule\nWhen the user asks to view, show, or share a local image, screenshot, or file in the Gemini app, ALWAYS call `view_file` (or `upload_to_drive`) and include the returned Google Drive `web_view_link` as a clickable Markdown link in your response. NEVER use `run_command` with `base64` to encode images.\n"
-	if existing, ok := out["~/AGENTS.md"]; ok && len(existing)+len(remoteFileNote) <= MaxBootstrapFileSize {
-		out["~/AGENTS.md"] = append(existing, []byte(remoteFileNote)...)
+	const remoteFileNote = "\n\n## Remote File & Image Sharing Rule\n- To read local source code, configuration files (e.g., `pom.xml`, `.json`, `.yaml`, `.md`), or logs, use `read_file` (or `view_file`) and present relevant snippets or summaries directly in Markdown in the chat. NEVER upload source code, config files, or sensitive files to Google Drive unless the user explicitly asks to upload them.\n- ONLY call `upload_to_drive` when the user explicitly asks you to show, view, or share an image, screenshot, PDF, or document in the Gemini app, and include the returned `web_view_link` as a clickable Markdown link. NEVER use `run_command` with `base64` to encode images.\n"
+	for _, targetKey := range []string{"~/.gemini/GEMINI.md", "~/AGENTS.md"} {
+		if existing, ok := out[targetKey]; ok && len(existing)+len(remoteFileNote) <= MaxBootstrapFileSize {
+			out[targetKey] = append(existing, []byte(remoteFileNote)...)
+		}
 	}
 	return out
 }
