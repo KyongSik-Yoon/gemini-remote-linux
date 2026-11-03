@@ -2,27 +2,28 @@
 
 [English](./README.md)
 
-macOS용 `Gemini.app` (`com.google.GeminiMacOS`) 프로토콜과 호환되어, **리눅스 머신을 Gemini Android / 웹 앱의 원격 데스크톱 실행 타겟으로 연결**하는 단일 바이너리 데몬 및 CLI입니다.
+**리눅스 PC 및 워크스테이션을 Gemini (모바일 및 웹 앱)의 원격 실행 환경으로 연결**해 주는 비공식 Linux 데스크톱 데몬 및 CLI입니다.
+
+단일 Go 바이너리로 로컬 폴더 연결, 터미널 명령 실행, 파일 편집, MCP 서버 연동, GUI 화면 제어(Computer Use) 기능을 Linux(Ubuntu, Arch, Fedora, Wayland/Hyprland, X11)에서 사용할 수 있습니다.
 
 ## 주요 기능
 
-- **macOS `Gemini.app` 호환 기기 등록 및 실시간 시그널링**
-  - `robinfrontend-pa.googleapis.com` gRPC/HTTP2 `RegisterDevice`, `UnregisterDevice`, `ListDevices`, `ReportClientPresence`, 양방향 스트리밍 `ExecuteRemoteTools` 구현 (요청 메타데이터, gzip 압축 gRPC 프레임 해제, 멀티턴 세션 스트림 자동 갱신 지원)
-  - `signaler-pa.googleapis.com` Punctual WebChannel V8 (`/punctual/v1/chooseServer`, `/punctual/multi-watch/channel`) 기반 실시간 `remote-tool-wakeup` / `bard-client-sync` 수신
-- **로컬 도구 전체 구현 (`internal/tools/executor.go`)**
-  - 셸/프로세스/코드: `run_command`, `command_status`, `send_command_input`, `run_python`
-  - 파일 시스템: `read_file`, `view_file` (Scotty 업로드 연동), `write_file` (`write_to_file`), `replace_file_content`, `multi_replace_file_content`
-  - 디렉토리/탐색: `list_directory` (`list_dir`), `find_by_name` (서브스트링 및 글로브 패턴 지원), `grep_search`, `find_folders`, `connect_folders`
-  - 스킬/MCP: `list_skills`, `ReadSkill` (`lookup_skill`), `list_mcp`, `execute_mcp` (내장 `git`, `obsidian` 및 외부 stdio MCP 브리지)
-  - GUI / Computer Use: `ui_control` (Wayland/Hyprland `hyprctl`, `grim`, `wtype`, `ydotool` 및 X11 `xdotool`, `import` 지원 + Scotty 스크린샷 업로드 + `ui_state` 윈도우 트리 보고)
+- **원격 데스크톱 연결 및 실시간 동기화**
+  - 기기 등록, 온라인 상태 보고, 양방향 스트리밍 기반 원격 도구 실행 및 멀티턴 세션 자동 갱신 지원
+  - 모바일·웹 Gemini 앱의 원격 호출 신호 실시간 수신 및 동기화
+- **로컬 도구 전체 구현**
+  - **셸 / 프로세스 / 코드**: `run_command`, `command_status`, `send_command_input`, `run_python`
+  - **파일 시스템**: `read_file`, `view_file` (이미지·파일 첨부 업로드 지원), `write_file`, `replace_file_content`, `multi_replace_file_content`
+  - **디렉토리 / 탐색**: `list_directory`, `find_by_name` (서브스트링 및 글로브 패턴 지원), `grep_search`, `find_folders`, `connect_folders`
+  - **스킬 / MCP**: `list_skills`, `ReadSkill`, `list_mcp`, `execute_mcp` (내장 `git`, `obsidian` 및 외부 stdio MCP 서버 브리지)
+  - **GUI / Computer Use**: `ui_control` (**Wayland / Hyprland** `hyprctl`, `grim`, `wtype`, `ydotool` 및 **X11** `xdotool`, `import` 지원 + 스크린샷 캡처 및 윈도우 트리 상태 보고)
 
 ## 빌드 및 실행
 
 ```bash
 go build -o gemini-remote ./cmd/gemini-remote
 
-# 0. 공식 macOS Gemini.app 번들(또는 Contents/MacOS/Gemini 바이너리)에서 OAuth 자격증명 추출
-#    (추출된 oauth_client_id / oauth_client_secret은 ~/.config/gemini-remote/config.json에 저장됨)
+# 0. OAuth 클라이언트 자격증명 설정 (기존 Gemini 데스크톱 앱 경로 지정 또는 ~/.config/gemini-remote/config.json 설정)
 ./gemini-remote extract-keys /path/to/Gemini.app
 
 # 1. Google 계정 OAuth 2.0 로그인
