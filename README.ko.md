@@ -43,3 +43,7 @@ go build -o gemini-remote ./cmd/gemini-remote
 # 5. systemd 사용자 서비스로 상시 실행 등록
 ./gemini-remote service install
 ```
+
+## 라이선스
+
+[MIT](LICENSE)

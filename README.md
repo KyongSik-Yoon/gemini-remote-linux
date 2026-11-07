@@ -43,3 +43,7 @@ go build -o gemini-remote ./cmd/gemini-remote
 # 5. Or install and start as a background systemd user service
 ./gemini-remote service install
 ```
+
+## License
+
+[MIT](LICENSE)
